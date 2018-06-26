@@ -44,7 +44,7 @@ class POSTracer:
         int32_field_decl = btw.IntegerFieldDeclaration(32)
         struct_field_decl = btw.StructureFieldDeclaration()
         struct_field_decl.add_field(int32_field_decl, "pid")
-        self.stream_class.event_context_type = struct_field_decl
+        self.stream_class.packet_context_type = struct_field_decl
         self.stream_context_decl = struct_field_decl
 
         event_class = btw.EventClass("task_create")
@@ -60,15 +60,18 @@ class POSTracer:
 
     def create_stream(self):
         self.stream = self.writer.create_stream(self.stream_class)
+        packet_context = self.stream.packet_context
+        f = packet_context.field("pid")
+        f.value = self.id
 
     def task_create(self, tid):
         ClockManager().sample()
         e = btw.Event(self.tcreateEventClass)
         e.payload("tid").value = tid
 
-        ctx = btw.StructureField(self.stream_context_decl)
-        ctx.field("pid").value = self.id
-        e.stream_context = ctx
+        #ctx = btw.StructureField(self.stream_context_decl)
+        #ctx.field("pid").value = self.id
+        #e.stream_context = ctx
 
         self.stream.append_event(e)
 
@@ -77,9 +80,9 @@ class POSTracer:
         e = btw.Event(self.schedswitchEventClass)
         e.payload("tid").value = tid
 
-        ctx = btw.StructureField(self.stream_context_decl)
-        ctx.field("pid").value = self.id
-        e.stream_context = ctx
+        #ctx = btw.StructureField(self.stream_context_decl)
+        #ctx.field("pid").value = self.id
+        #e.stream_context = ctx
 
         self.stream.append_event(e)
 
