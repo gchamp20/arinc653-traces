@@ -44,6 +44,7 @@ class POSTracer:
         int32_field_decl = btw.IntegerFieldDeclaration(32)
         struct_field_decl = btw.StructureFieldDeclaration()
         struct_field_decl.add_field(int32_field_decl, "pid")
+        struct_field_decl.add_field(int32_field_decl, "cpu_id")
         self.stream_class.packet_context_type = struct_field_decl
         self.stream_context_decl = struct_field_decl
 
@@ -63,6 +64,8 @@ class POSTracer:
         packet_context = self.stream.packet_context
         f = packet_context.field("pid")
         f.value = self.id
+        f = packet_context.field("cpu_id")
+        f.value = 1
 
     def task_create(self, tid):
         ClockManager().sample()
