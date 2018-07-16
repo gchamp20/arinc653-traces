@@ -54,10 +54,20 @@ class POSTracer:
         self.stream_class.add_event_class(event_class)
         self.tcreateEventClass = event_class
 
-        self.schedswitchEventClass = btw.EventClass("sched_switch_in")
+        self.schedswitchEventClass = btw.EventClass("task_switch")
         int32_type = btw.IntegerFieldDeclaration(32)
-        self.schedswitchEventClass.add_field(int32_type, "tid")
+        self.schedswitchEventClass.add_field(int32_type, "next_tid")
         self.stream_class.add_event_class(self.schedswitchEventClass)
+
+        self.irqEntryEventClass = btw.EventClass("irq_entry")
+        int32_type = btw.IntegerFieldDeclaration(32)
+        self.irqEntryEventClass.add_field(int32_type, "irq")
+        self.stream_class.add_event_class(self.irqEntryEventClass)
+
+        self.irqExitEventClass = btw.EventClass("irq_exit")
+        int32_type = btw.IntegerFieldDeclaration(32)
+        self.irqExitEventClass.add_field(int32_type, "irq")
+        self.stream_class.add_event_class(self.irqExitEventClass)
 
     def create_stream(self):
         self.stream = self.writer.create_stream(self.stream_class)
@@ -81,12 +91,24 @@ class POSTracer:
     def sched_switch(self, tid):
         ClockManager().sample()
         e = btw.Event(self.schedswitchEventClass)
-        e.payload("tid").value = tid
+        e.payload("next_tid").value = tid
 
         #ctx = btw.StructureField(self.stream_context_decl)
         #ctx.field("pid").value = self.id
         #e.stream_context = ctx
 
+        self.stream.append_event(e)
+
+    def irq_entry(self, irq):
+        ClockManager().sample()
+        e = btw.Event(self.irqEntryEventClass)
+        e.payload("irq").value = irq
+        self.stream.append_event(e)
+
+    def irq_exit(self, irq):
+        ClockManager().sample()
+        e = btw.Event(self.irqExitEventClass)
+        e.payload("irq").value = irq
         self.stream.append_event(e)
 
     def flush(self):
@@ -105,24 +127,43 @@ class POS:
         tasks[t] = 1
 
         e.wait()
-        self.tracer.task_create(t + 1)
-        self.tracer.sched_switch(t + 1)
+        self.tracer.task_create(t)
+        self.tracer.sched_switch(t)
 
         budget = runtime
+        handling_interrupt = False
+        int_number = -1
+        int_duration = -1
         while budget > 0:
             #print(self.id, "is running")
-            if random.randrange(0, 100) > 80:
-                old_t = t
-                t = random.randrange(0, nb_task)
-                if t != old_t:
-                    if tasks[t] == 0:
-                        self.tracer.task_create(t + 1)
-                        tasks[t] = 1
-                    self.tracer.sched_switch(t + 1)
+            if not handling_interrupt:
+                if random.randrange(0, 100) > 80:
+                    old_t = t
+                    t = random.randrange(0, nb_task)
+                    if t != old_t:
+                        if tasks[t] == 0:
+                            self.tracer.task_create(t)
+                            tasks[t] = 1
+                        self.tracer.sched_switch(t)
+                elif random.randrange(0, 100) > 97:
+                    handling_interrupt = True
+                    int_number = random.randrange(10, 40)
+                    int_duration = random.randrange(1, 5) * 0.0005
+                    self.tracer.irq_entry(int_number)
+            else:
+                int_duration -= 0.001
+                if int_duration <= 0:
+                    self.tracer.irq_exit(int_number)
+                    handling_interrupt = False
 
             time.sleep(0.001)
             #self.tracer.sched_switch(0)
             budget -= 1
+
+        if handling_interrupt:
+            time.sleep(int_duration)
+            self.tracer.irq_exit(int_number)
+
         self.tracer.flush()
         e.clear()
         done.set()
