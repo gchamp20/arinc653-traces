@@ -69,6 +69,17 @@ class POSTracer:
         self.irqExitEventClass.add_field(int32_type, "irq")
         self.stream_class.add_event_class(self.irqExitEventClass)
 
+        self.syscallEntryEventClass = btw.EventClass("sys_raw_entry")
+        int32_type = btw.IntegerFieldDeclaration(32)
+        self.syscallEntryEventClass.add_field(int32_type, "id")
+        self.stream_class.add_event_class(self.syscallEntryEventClass)
+
+        self.syscallExitEventClass = btw.EventClass("sys_raw_exit")
+        int32_type = btw.IntegerFieldDeclaration(32)
+        self.syscallExitEventClass.add_field(int32_type, "id")
+        self.stream_class.add_event_class(self.syscallExitEventClass)
+
+
     def create_stream(self):
         self.stream = self.writer.create_stream(self.stream_class)
         packet_context = self.stream.packet_context
@@ -111,6 +122,18 @@ class POSTracer:
         e.payload("irq").value = irq
         self.stream.append_event(e)
 
+    def syscall_exit(self, irq):
+        ClockManager().sample()
+        e = btw.Event(self.syscallExitEventClass)
+        e.payload("id").value = irq
+        self.stream.append_event(e)
+
+    def syscall_entry(self, irq):
+        ClockManager().sample()
+        e = btw.Event(self.syscallEntryEventClass)
+        e.payload("id").value = irq
+        self.stream.append_event(e)
+
     def flush(self):
         self.stream.flush()
 
@@ -132,11 +155,15 @@ class POS:
 
         budget = runtime
         handling_interrupt = False
+        handling_syscall = False
+
         int_number = -1
+
         int_duration = -1
+        syscall_duration = -1
         while budget > 0:
             #print(self.id, "is running")
-            if not handling_interrupt:
+            if not handling_interrupt and not handling_syscall:
                 if random.randrange(0, 100) > 80:
                     old_t = t
                     t = random.randrange(0, nb_task)
@@ -145,16 +172,26 @@ class POS:
                             self.tracer.task_create(t)
                             tasks[t] = 1
                         self.tracer.sched_switch(t)
+                elif random.randrange(0, 100) > 90:
+                    handling_syscall = True
+                    syscall_duration = random.randrange(1, 10) * 0.0005
+                    self.tracer.syscall_entry(2)
                 elif random.randrange(0, 100) > 97:
                     handling_interrupt = True
                     int_number = random.randrange(10, 40)
                     int_duration = random.randrange(1, 5) * 0.0005
                     self.tracer.irq_entry(int_number)
             else:
-                int_duration -= 0.001
-                if int_duration <= 0:
-                    self.tracer.irq_exit(int_number)
-                    handling_interrupt = False
+                if handling_interrupt:
+                    int_duration -= 0.001
+                    if int_duration <= 0:
+                        self.tracer.irq_exit(int_number)
+                        handling_interrupt = False
+                elif handling_syscall:
+                    syscall_duration -= 0.001
+                    if syscall_duration <= 0:
+                        self.tracer.syscall_exit(2)
+                        handling_syscall = False
 
             time.sleep(0.001)
             #self.tracer.sched_switch(0)
