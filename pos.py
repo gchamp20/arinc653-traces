@@ -59,12 +59,12 @@ class POSTracer:
         self.schedswitchEventClass.add_field(int32_type, "next_tid")
         self.stream_class.add_event_class(self.schedswitchEventClass)
 
-        self.irqEntryEventClass = btw.EventClass("irq_entry")
+        self.irqEntryEventClass = btw.EventClass("irq_handler_entry")
         int32_type = btw.IntegerFieldDeclaration(32)
         self.irqEntryEventClass.add_field(int32_type, "irq")
         self.stream_class.add_event_class(self.irqEntryEventClass)
 
-        self.irqExitEventClass = btw.EventClass("irq_exit")
+        self.irqExitEventClass = btw.EventClass("irq_handler_exit")
         int32_type = btw.IntegerFieldDeclaration(32)
         self.irqExitEventClass.add_field(int32_type, "irq")
         self.stream_class.add_event_class(self.irqExitEventClass)
