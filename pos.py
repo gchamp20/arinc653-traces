@@ -170,69 +170,78 @@ class POS:
         self.id = uuid
         self.tracer = POSTracer(uuid, os.getcwd() + '/traces')
 
-    def run(self, e, done, runtime):
+    def run(self, e, done, runtime, nb_calls):
         nb_task = random.randrange(1, 10)
         print(self.id, "is init", nb_task)
         tasks = [0 for i in range(nb_task)]
         t = 0
         tasks[t] = 1
 
+        firstRun = True
         e.wait()
         self.tracer.partSwitch(self.id)
         self.tracer.task_create(t)
         self.tracer.apex_START(t)
         self.tracer.sched_switch(t)
 
-        budget = runtime
-        handling_interrupt = False
-        handling_syscall = False
+        while nb_calls > 0:
+            nb_calls -= 1
+            if not firstRun:
+                e.wait()
+                self.tracer.partSwitch(self.id)
+                print("ye", nb_calls)
+            budget = runtime
+            handling_interrupt = False
+            handling_syscall = False
 
-        int_number = -1
+            int_number = -1
 
-        int_duration = -1
-        syscall_duration = -1
-        while budget > 0:
-            #print(self.id, "is running")
-            if not handling_interrupt and not handling_syscall:
-                if random.randrange(0, 100) > 80:
-                    old_t = t
-                    t = random.randrange(0, nb_task)
-                    if t != old_t:
-                        if tasks[t] == 0:
-                            self.tracer.apex_START(t)
-                            self.tracer.task_create(t)
-                            tasks[t] = 1
-                        self.tracer.sched_switch(t)
-                elif random.randrange(0, 100) > 90:
-                    handling_syscall = True
-                    syscall_duration = random.randrange(1, 10) * 0.0005
-                    self.tracer.syscall_entry(2)
-                elif random.randrange(0, 100) > 97:
-                    handling_interrupt = True
-                    int_number = random.randrange(10, 40)
-                    int_duration = random.randrange(1, 5) * 0.0005
-                    self.tracer.irq_entry(int_number)
-            else:
-                if handling_interrupt:
-                    int_duration -= 0.001
-                    if int_duration <= 0:
-                        self.tracer.irq_exit(int_number)
-                        handling_interrupt = False
-                elif handling_syscall:
-                    syscall_duration -= 0.001
-                    if syscall_duration <= 0:
-                        self.tracer.syscall_exit(2)
-                        handling_syscall = False
+            int_duration = -1
+            syscall_duration = -1
+            while budget > 0:
+                #print(self.id, "is running")
+                if not handling_interrupt and not handling_syscall:
+                    if random.randrange(0, 100) > 80:
+                        old_t = t
+                        t = random.randrange(0, nb_task)
+                        if t != old_t:
+                            if tasks[t] == 0:
+                                self.tracer.apex_START(t)
+                                self.tracer.task_create(t)
+                                tasks[t] = 1
+                            self.tracer.sched_switch(t)
+                    elif random.randrange(0, 100) > 90:
+                        handling_syscall = True
+                        syscall_duration = random.randrange(1, 10) * 0.0005
+                        self.tracer.syscall_entry(2)
+                    elif random.randrange(0, 100) > 97:
+                        handling_interrupt = True
+                        int_number = random.randrange(10, 40)
+                        int_duration = random.randrange(1, 5) * 0.0005
+                        self.tracer.irq_entry(int_number)
+                else:
+                    if handling_interrupt:
+                        int_duration -= 0.001
+                        if int_duration <= 0:
+                            self.tracer.irq_exit(int_number)
+                            handling_interrupt = False
+                    elif handling_syscall:
+                        syscall_duration -= 0.001
+                        if syscall_duration <= 0:
+                            self.tracer.syscall_exit(2)
+                            handling_syscall = False
 
-            time.sleep(0.001)
-            #self.tracer.sched_switch(0)
-            budget -= 1
+                time.sleep(0.001)
+                #self.tracer.sched_switch(0)
+                budget -= 1
 
-        if handling_interrupt:
-            time.sleep(int_duration)
-            self.tracer.irq_exit(int_number)
+            if handling_interrupt:
+                time.sleep(int_duration)
+                self.tracer.irq_exit(int_number)
 
+            e.clear()
+            done.set()
+            firstRun = False
+
+        print("floush")
         self.tracer.flush()
-        e.clear()
-        done.set()
-
