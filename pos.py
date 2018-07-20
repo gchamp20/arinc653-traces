@@ -54,6 +54,12 @@ class POSTracer:
         self.stream_class.add_event_class(event_class)
         self.tcreateEventClass = event_class
 
+        event_class = btw.EventClass("apex_START")
+        int32_type = btw.IntegerFieldDeclaration(32)
+        event_class.add_field(int32_type, "tid")
+        self.stream_class.add_event_class(event_class)
+        self.apexStart = event_class
+
         self.schedswitchEventClass = btw.EventClass("task_switch")
         int32_type = btw.IntegerFieldDeclaration(32)
         self.schedswitchEventClass.add_field(int32_type, "next_tid")
@@ -79,6 +85,11 @@ class POSTracer:
         self.syscallExitEventClass.add_field(int32_type, "id")
         self.stream_class.add_event_class(self.syscallExitEventClass)
 
+        self.partSwitchEventClass = btw.EventClass("part_switch")
+        int32_type = btw.IntegerFieldDeclaration(32)
+        self.partSwitchEventClass.add_field(int32_type, "pid")
+        self.stream_class.add_event_class(self.partSwitchEventClass)
+
 
     def create_stream(self):
         self.stream = self.writer.create_stream(self.stream_class)
@@ -91,6 +102,17 @@ class POSTracer:
     def task_create(self, tid):
         ClockManager().sample()
         e = btw.Event(self.tcreateEventClass)
+        e.payload("tid").value = tid
+
+        #ctx = btw.StructureField(self.stream_context_decl)
+        #ctx.field("pid").value = self.id
+        #e.stream_context = ctx
+
+        self.stream.append_event(e)
+
+    def apex_START(self, tid):
+        ClockManager().sample()
+        e = btw.Event(self.apexStart)
         e.payload("tid").value = tid
 
         #ctx = btw.StructureField(self.stream_context_decl)
@@ -134,6 +156,12 @@ class POSTracer:
         e.payload("id").value = irq
         self.stream.append_event(e)
 
+    def partSwitch(self, pid):
+        ClockManager().sample()
+        e = btw.Event(self.partSwitchEventClass)
+        e.payload("pid").value = pid
+        self.stream.append_event(e)
+
     def flush(self):
         self.stream.flush()
 
@@ -150,7 +178,9 @@ class POS:
         tasks[t] = 1
 
         e.wait()
+        self.tracer.partSwitch(self.id)
         self.tracer.task_create(t)
+        self.tracer.apex_START(t)
         self.tracer.sched_switch(t)
 
         budget = runtime
@@ -169,6 +199,7 @@ class POS:
                     t = random.randrange(0, nb_task)
                     if t != old_t:
                         if tasks[t] == 0:
+                            self.tracer.apex_START(t)
                             self.tracer.task_create(t)
                             tasks[t] = 1
                         self.tracer.sched_switch(t)
